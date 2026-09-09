@@ -212,7 +212,9 @@ var sandboxHandlers = new Map(); // nonce -> { resolve, timer }
 var sandboxRunnerPromise = null;
 function getSandboxRunnerSource() {
   if (!sandboxRunnerPromise) {
-    sandboxRunnerPromise = fetch(chrome.runtime.getURL('sandbox.html'))
+    /* Relative URL: avoids chrome.runtime, which is partially exposed
+     * in Firefox devtools pages. Same-origin extension resource. */
+    sandboxRunnerPromise = fetch('sandbox.html')
       .then(function (r) { return r.text(); })
       .then(function (text) {
         var m = text.match(/<script>([\s\S]*)<\/script>/);
@@ -432,26 +434,88 @@ var chat = $('chat'), input = $('input'), sendBtn = $('sendBtn'),
 
 var SETTINGS_KEY = 'page_chat_settings';
 
-function saveSettings() {
-  try {
-    chrome.storage.local.set({
-      [SETTINGS_KEY]: {
-        key: keyInput.value.trim(),
-        model: modelInput.value.trim(),
-        sys: sysInput.value
+/* Send a message to the background page. In Firefox devtools pages this
+ * (runtime messaging) is the only way to reach extension APIs. */
+function bgSend(msg) {
+  return new Promise(function (resolve, reject) {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime ||
+          typeof chrome.runtime.sendMessage !== 'function') {
+        return reject(new Error('runtime messaging unavailable'));
       }
-    });
-  } catch (e) { /* ignore */ }
+      chrome.runtime.sendMessage(msg, function (resp) {
+        if (chrome.runtime.lastError) {
+          return reject(new Error(chrome.runtime.lastError.message));
+        }
+        resolve(resp);
+      });
+    } catch (e) { reject(e); }
+  });
 }
-function loadSettings() {
+
+function localStorageUsable() {
   try {
-    chrome.storage.local.get(SETTINGS_KEY, function (data) {
-      var s = data && data[SETTINGS_KEY];
-      if (!s) return;
-      keyInput.value = s.key || '';
-      modelInput.value = s.model || '';
-      if (typeof s.sys === 'string' && s.sys) sysInput.value = s.sys;
-    });
+    localStorage.setItem('page_chat_test', '1');
+    localStorage.removeItem('page_chat_test');
+    return true;
+  } catch (e) { return false; }
+}
+
+function applySettings(s) {
+  if (!s) return;
+  keyInput.value = s.key || '';
+  modelInput.value = s.model || '';
+  if (typeof s.sys === 'string' && s.sys) sysInput.value = s.sys;
+}
+
+/* Persistence order: chrome.storage (always on Chrome; sometimes on Firefox),
+ * then localStorage, then the background relay. Firefox devtools pages may
+ * lack all extension APIs and the background may be unreachable, hence the
+ * chain. */
+async function saveSettings() {
+  var s = {
+    key: keyInput.value.trim(),
+    model: modelInput.value.trim(),
+    sys: sysInput.value
+  };
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      await new Promise(function (resolve, reject) {
+        chrome.storage.local.set({ [SETTINGS_KEY]: s }, function () {
+          if (chrome.runtime && chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else resolve();
+        });
+      });
+      return;
+    }
+  } catch (e) { /* fall through */ }
+  if (localStorageUsable()) {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); return; } catch (e) {}
+  }
+  try { await bgSend({ type: 'settings_set', settings: s }); } catch (e) { /* nowhere to persist */ }
+}
+
+async function loadSettings() {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      var s = await new Promise(function (resolve) {
+        chrome.storage.local.get(SETTINGS_KEY, function (data) {
+          resolve(data && data[SETTINGS_KEY]);
+        });
+      });
+      if (s) { applySettings(s); return; }
+    }
+  } catch (e) { /* fall through */ }
+  if (localStorageUsable()) {
+    try {
+      var s2 = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+      if (s2) { applySettings(s2); return; }
+    } catch (e) { /* fall through */ }
+  }
+  try {
+    var resp = await bgSend({ type: 'settings_get' });
+    if (resp && resp.settings) applySettings(resp.settings);
   } catch (e) { /* ignore */ }
 }
 
@@ -522,15 +586,10 @@ function showError(msg) {
   scrollBottom();
 }
 
-/* ---------- OpenRouter API ---------- */
-async function callAPI(messages) {
-  var body = {
-    model: modelInput.value.trim() || 'openrouter/auto',
-    messages: messages,
-    tools: TOOLS,
-    tool_choice: 'auto',
-    max_tokens: 4096
-  };
+/* Direct OpenRouter fetch from the panel page. Works on Chrome (host
+ * permission auto-granted) and on Firefox once the openrouter.ai host
+ * permission has been granted. Returns the parsed JSON response. */
+async function directOrFetch(body) {
   var resp = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -546,9 +605,48 @@ async function callAPI(messages) {
       var j = await resp.json();
       if (j && j.error) detail = j.error.message || detail;
     } catch (e) { /* not json */ }
-    throw new Error(detail);
+    var err = new Error(detail);
+    err.http = true; // server responded; falling back to the relay won't help
+    throw err;
   }
   return resp.json();
+}
+
+/* Firefox: the openrouter.ai host permission may not be granted yet, and the
+ * background page used for the relay may be unreachable ("Receiving end does
+ * not exist") — so try a direct fetch first, then the relay (which can request
+ * the permission itself), and surface clear guidance otherwise. */
+async function callAPI(messages) {
+  var body = {
+    model: modelInput.value.trim() || 'openrouter/auto',
+    messages: messages,
+    tools: TOOLS,
+    tool_choice: 'auto',
+    max_tokens: 4096
+  };
+
+  if (IS_FIREFOX) {
+    try {
+      return await directOrFetch(body);
+    } catch (directErr) {
+      if (directErr.http) throw directErr; // real API error, not a permission issue
+      var r = null;
+      try {
+        r = await bgSend({ type: 'or_fetch', apiKey: keyInput.value.trim(), body: body });
+      } catch (e) { /* relay unavailable */ }
+      if (r && r.ok === true) return r.data;
+      throw new Error(
+        'openrouter.ai request failed: ' +
+        (directErr && directErr.message ? directErr.message : directErr) +
+        '. Grant the "Access your data for openrouter.ai" permission in ' +
+        'about:addons → Extensions → Page Chat DevTools → Permissions' +
+        (r && r.error ? ' (relay: ' + r.error + ')' :
+         ', and make sure the extension was loaded from manifest-firefox.json (no background page found)')
+      );
+    }
+  }
+
+  return await directOrFetch(body);
 }
 
 /* Run the user/AI loop, following tool calls until a plain text reply. */
@@ -606,6 +704,10 @@ function send() {
     showError('Enter your OpenRouter API key in Settings first.');
     return;
   }
+
+  /* Firefox: devtools pages have no permissions API; the background page
+   * requests the openrouter.ai host permission (if needed) during fetch. */
+  if (IS_FIREFOX) { doSend(text); return; }
 
   if (originGranted === true) { doSend(text); return; }
 
