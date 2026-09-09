@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Page Chat DevTools",
+  "version": "0.1.0",
+  "description": "DevTools panel with an OpenRouter chatbot that can run script in the inspected page.",
+  "devtools_page": "devtools.html",
+  "permissions": ["storage"],
+  "host_permissions": ["https://openrouter.ai/*"],
+  "optional_host_permissions": ["https://openrouter.ai/*"],
+  "sandbox": {
+    "pages": ["sandbox.html"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "page-chat-devtools@example.com",
+      "strict_min_version": "115.0"
+    }
+  }
+}
