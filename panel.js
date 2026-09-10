@@ -685,7 +685,7 @@ async function callAPI(messages) {
         '. Grant the "Access your data for openrouter.ai" permission in ' +
         'about:addons → Extensions → Page Chat DevTools → Permissions' +
         (r && r.error ? ' (relay: ' + r.error + ')' :
-         ', and make sure the extension was loaded from manifest-firefox.json (no background page found)')
+         ', and make sure the extension is loaded from manifest.json (no background page found)')
       );
     }
   }

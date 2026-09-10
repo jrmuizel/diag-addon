@@ -13,8 +13,7 @@ tool and a sandboxed JS executor).
 
 | File | Purpose |
 |---|---|
-| `manifest.json` | MV3 manifest for Chrome; devtools page, permissions, sandboxed runner page, service worker |
-| `manifest-firefox.json` | MV3 manifest for Firefox; uses `background.scripts` (Firefox doesn't support extension service workers) |
+| `manifest.json` | MV3 manifest for both browsers: `background.service_worker` (Chrome) + `background.scripts` (Firefox). Chrome 121+ ignores the `scripts` key (older Chrome would refuse it, hence `minimum_chrome_version: 121`); Firefox ignores `service_worker` and runs the event page |
 | `devtools.html` / `devtools.js` | DevTools entry point; creates the "Page Chat" panel |
 | `panel.html` / `panel.js` | The chat UI and chat loop (OpenRouter API, tool dispatch, rendering) |
 | `background.js` | Relay for extension APIs: settings storage and the OpenRouter request (used on Firefox; also available on Chrome) |
@@ -38,9 +37,8 @@ tool and a sandboxed JS executor).
 
 1. Get an OpenRouter API key at [openrouter.ai/keys](https://openrouter.ai/keys).
 2. Load the extension:
-   - **Chrome:** `chrome://extensions` → enable *Developer mode* → *Load unpacked* → select this folder.
-   - **Edge:** `edge://extensions` → *Load unpacked* → select this folder.
-   - **Firefox:** `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on…* → pick **`manifest-firefox.json`** (Firefox MV3 needs `background.scripts` instead of a service worker, so it has its own manifest).
+   - **Chrome/Edge 121+:** `chrome://extensions` → enable *Developer mode* → *Load unpacked* → select this folder.
+   - **Firefox:** `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on…* → pick **`manifest.json`**. A console warning that `background.service_worker` is disabled is expected — Firefox ignores it and uses `background.scripts` instead.
 3. Open any page, open DevTools, and select the **"Page Chat"** panel.
 4. Open **Settings ▾**, paste your API key (and optionally pick a model / edit the
    system prompt), and start chatting.
@@ -71,9 +69,9 @@ Works in both Chrome and Firefox, with three Firefox-specific adaptations
   `sandbox="allow-scripts"` pointing at a `data:` URL (opaque origin, does not
   inherit the extension CSP). Chrome uses the manifest-sandboxed
   `sandbox.html`.
-- **Important:** load the extension in Firefox from **`manifest-firefox.json`**
-  (the Chrome `manifest.json` has no background script Firefox can run, which
-  surfaces as "Could not establish connection. Receiving end does not exist.").
+- **Background page:** one `manifest.json` serves both browsers — Chrome runs
+  `background.js` as a service worker, Firefox as an event page (see the
+  manifest row in the file table above).
 
 ## Security notes
 
