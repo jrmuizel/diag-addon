@@ -64,7 +64,7 @@
   .mrow { display: flex; }
   .mrow.user { justify-content: flex-end; }
   .mrow.assistant { justify-content: flex-start; }
-  .mrow.tool { justify-content: center; }
+  .mrow.tool { justify-content: flex-start; padding-left: 18px; }
   .mrow.error { justify-content: center; }
   .mrow.typing { justify-content: flex-start; }
 
@@ -83,7 +83,7 @@
   details.toolcall, details.toolresult {
     font-family: var(--mono); font-size: 11px; color: var(--muted);
     background: #eef1f4; border: 1px solid var(--border); border-radius: 8px;
-    max-width: 95%;
+    max-width: 95%; box-sizing: border-box; width: fit-content; min-width: 0;
   }
   details.toolcall > summary, details.toolresult > summary {
     padding: 3px 8px; cursor: pointer; user-select: none;
