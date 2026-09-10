@@ -799,16 +799,6 @@ function clearChat() {
   state.history = [];
   state.rendered = 0;
   chat.innerHTML = '';
-  addIntro();
-}
-
-function addIntro() {
-  var inner = el('div', 'inner');
-  inner.appendChild(el('div', 'bubble',
-    'Hi! I can do math, run sandboxed JavaScript, or execute script inside the inspected page. Try: "How many <img> tags does this page have?" or "sort [5,3,8,1] with code".'));
-  var row = el('div', 'mrow assistant');
-  row.appendChild(inner);
-  chat.appendChild(row);
 }
 
 function autoGrow() {
@@ -836,7 +826,6 @@ function loadPageInfo() {
 function init() {
   loadSettings();
   loadPageInfo();
-  addIntro();
   scrollBottom();
 
   sendBtn.addEventListener('click', send);
