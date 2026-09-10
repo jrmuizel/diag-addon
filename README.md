@@ -1,13 +1,13 @@
 # Page Chat DevTools
 
 A browser web extension that adds a **"Page Chat" panel to DevTools** containing an
-OpenRouter-powered chatbot. The assistant can answer questions, do math, run
-sandboxed JavaScript — and **execute script inside the inspected page**, so you
-can ask it things like *"how many `<img>` tags does this page have?"* or *"what's
-in this page's localStorage?"*
+OpenRouter-powered chatbot. The assistant can answer questions, run sandboxed
+JavaScript — and **execute script inside the inspected page**, so you can ask it
+things like *"how many `<img>` tags does this page have?"* or *"what's in this
+page's localStorage?"*
 
-Inspired by `~/tools/chatbot` (single-file OpenRouter chatbot with a calculator
-tool and a sandboxed JS executor).
+Inspired by `~/tools/chatbot` (single-file OpenRouter chatbot with a sandboxed
+JS executor).
 
 ## Files
 
@@ -21,11 +21,10 @@ tool and a sandboxed JS executor).
 
 ## Tools available to the chatbot
 
-1. **`calculator`** — safe arithmetic expression evaluator (no eval).
-2. **`execute_javascript`** — runs JS in an isolated sandbox (no DOM, no network,
+1. **`execute_javascript`** — runs JS in an isolated sandbox (no DOM, no network,
    no page access); console output is captured, Promises are awaited, runaway
    code is killed after a timeout.
-3. **`execute_in_page`** — runs JS **in the inspected page** via
+2. **`execute_in_page`** — runs JS **in the inspected page** via
    `chrome.devtools.inspectedWindow.eval`, with full access to the page's DOM,
    `window`, `document` and `localStorage`. The value of the last expression is
    returned and must be JSON-serializable (DOM nodes should be stringified, e.g.

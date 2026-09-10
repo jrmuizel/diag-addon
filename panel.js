@@ -1,152 +1,13 @@
 'use strict';
 
 /* =====================================================================
- * Calculator tool: safe expression evaluator (no eval).
- * Supports: + - * / % ^ parentheses, unary minus, constants
- * (pi, e, tau) and functions sqrt abs round floor ceil sin cos tan
- * asin acos atan log ln exp min max sign.
- * ===================================================================== */
-function makeEvaluator() {
-  var tokens, pos;
-
-  function tokenize(s) {
-    var out = [], i = 0;
-    var numRe = /\d*\.?\d+(?:[eE][+-]?\d+)?/y;
-    var idRe  = /[A-Za-z_][A-Za-z0-9_]*/y;
-    while (i < s.length) {
-      var c = s[i];
-      if (/\s/.test(c)) { i++; continue; }
-      numRe.lastIndex = i;
-      var m = numRe.exec(s);
-      if (m) { out.push({ t: 'num', v: parseFloat(m[0]) }); i += m[0].length; continue; }
-      idRe.lastIndex = i;
-      var mi = idRe.exec(s);
-      if (mi) { out.push({ t: 'ident', v: mi[0] }); i += mi[0].length; continue; }
-      if ('+-*/%^(),'.indexOf(c) !== -1) { out.push({ t: c, v: c }); i++; continue; }
-      throw new Error('unexpected character "' + c + '"');
-    }
-    out.push({ t: 'eof' });
-    return out;
-  }
-
-  function peek() { return tokens[pos]; }
-  function next() { return tokens[pos++]; }
-  function expect(t) {
-    var x = next();
-    if (x.t !== t) throw new Error('expected "' + t + '"');
-    return x;
-  }
-
-  var FUNCS = {
-    sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor,
-    ceil: Math.ceil, sin: Math.sin, cos: Math.cos, tan: Math.tan,
-    asin: Math.asin, acos: Math.acos, atan: Math.atan,
-    log: Math.log10, ln: Math.log, exp: Math.exp,
-    min: Math.min, max: Math.max, sign: Math.sign
-  };
-  var CONSTS = { pi: Math.PI, e: Math.E, tau: 2 * Math.PI };
-
-  function parseExpr() {
-    var v = parseTerm();
-    while (peek().t === '+' || peek().t === '-') {
-      var op = next().t;
-      var r = parseTerm();
-      v = op === '+' ? v + r : v - r;
-    }
-    return v;
-  }
-  function parseTerm() {
-    var v = parsePower();
-    while (peek().t === '*' || peek().t === '/' || peek().t === '%') {
-      var op = next().t;
-      var r = parsePower();
-      if (op === '*') v = v * r;
-      else if (op === '/') {
-        if (r === 0) throw new Error('division by zero');
-        v = v / r;
-      } else {
-        if (r === 0) throw new Error('modulo by zero');
-        v = v % r;
-      }
-    }
-    return v;
-  }
-  function parsePower() { // right-associative: 2^3^2 = 2^(3^2)
-    var base = parseUnary();
-    if (peek().t === '^') {
-      next();
-      return Math.pow(base, parsePower());
-    }
-    return base;
-  }
-  function parseUnary() {
-    var t = peek().t;
-    if (t === '-' || t === '+') { next(); var v = parseUnary(); return t === '-' ? -v : v; }
-    return parsePrimary();
-  }
-  function parsePrimary() {
-    var tok = next();
-    if (tok.t === 'num') return tok.v;
-    if (tok.t === '(') {
-      var v = parseExpr();
-      expect(')');
-      return v;
-    }
-    if (tok.t === 'ident') {
-      if (peek().t === '(') {
-        next();
-        var args = [];
-        if (peek().t !== ')') {
-          args.push(parseExpr());
-          while (peek().t === ',') { next(); args.push(parseExpr()); }
-        }
-        expect(')');
-        var fn = FUNCS[tok.v];
-        if (!fn) throw new Error('unknown function "' + tok.v + '"');
-        return fn.apply(null, args);
-      }
-      if (tok.v in CONSTS) return CONSTS[tok.v];
-      throw new Error('unknown identifier "' + tok.v + '"');
-    }
-    throw new Error('unexpected token "' + (tok.v === undefined ? tok.t : tok.v) + '"');
-  }
-
-  return function (expr) {
-    tokens = tokenize(String(expr));
-    pos = 0;
-    var v = parseExpr();
-    if (peek().t !== 'eof') throw new Error('unexpected trailing input');
-    if (!isFinite(v)) throw new Error('result is not finite');
-    // trim float noise, e.g. 0.1+0.2 -> 0.3
-    return Number(v.toPrecision(12));
-  };
-}
-var evaluate = makeEvaluator();
-
-/* =====================================================================
  * Tool definitions (OpenAI-style "tools" sent to OpenRouter)
  * ===================================================================== */
 var TOOLS = [{
   type: 'function',
   function: {
-    name: 'calculator',
-    description: 'Evaluate a mathematical expression and return the numeric result. Supports + - * / % ^, parentheses, constants (pi, e) and functions such as sqrt, abs, round, floor, ceil, sin, cos, tan, log, ln, exp, min, max. Prefer this tool for simple arithmetic only.',
-    parameters: {
-      type: 'object',
-      properties: {
-        expression: {
-          type: 'string',
-          description: 'The mathematical expression to evaluate, e.g. "3 * (4 + 5) / 7"'
-        }
-      },
-      required: ['expression']
-    }
-  }
-}, {
-  type: 'function',
-  function: {
     name: 'execute_javascript',
-    description: 'Run JavaScript (ECMAScript) code in a fresh, isolated sandbox and return its output. The sandbox has NO access to the inspected page, no DOM, no localStorage/cookies and no network (fetch, XMLHttpRequest, WebSocket, importScripts are removed); a running instance is terminated after a timeout. Prefer this over calculator for anything needing loops, arrays, objects, sorting, JSON, strings, statistics, etc. Use execute_in_page instead if the task concerns the inspected page. console.log output is captured and included in the result. The returned value is the value of the last expression evaluated; if that value is a Promise it is awaited (up to the timeout). Example code: "[3,1,2].sort()" returns [1,2,3].',
+    description: 'Run JavaScript (ECMAScript) code in a fresh, isolated sandbox and return its output. The sandbox has NO access to the inspected page, no DOM, no localStorage/cookies and no network (fetch, XMLHttpRequest, WebSocket, importScripts are removed); a running instance is terminated after a timeout. Use this for general computation: loops, arrays, objects, sorting, JSON, strings, statistics, etc. Use execute_in_page instead if the task concerns the inspected page. console.log output is captured and included in the result. The returned value is the value of the last expression evaluated; if that value is a Promise it is awaited (up to the timeout). Example code: "[3,1,2].sort()" returns [1,2,3].',
     parameters: {
       type: 'object',
       properties: {
@@ -175,11 +36,6 @@ var TOOLS = [{
     }
   }
 }];
-
-function fmtNum(n) {
-  if (typeof n !== 'number' || !isFinite(n)) return String(n);
-  return String(Number(n.toPrecision(12)));
-}
 
 var MAX_RESULT = 8000;
 
@@ -369,17 +225,6 @@ function runInPage(code) {
   });
 }
 
-function runCalculator(args) {
-  var expr = args && args.expression;
-  if (typeof expr !== 'string' || !expr.trim())
-    return 'Error: missing required string argument "expression"';
-  try {
-    return 'result = ' + fmtNum(evaluate(expr));
-  } catch (e) {
-    return 'Error: ' + e.message;
-  }
-}
-
 /* Execute a tool call; resolves to the string result shown to the model. */
 async function runTool(tc) {
   var name = tc && tc.function && tc.function.name;
@@ -390,8 +235,6 @@ async function runTool(tc) {
   } catch (e) {
     return 'Error: could not parse tool arguments: ' + e.message;
   }
-
-  if (name === 'calculator') return runCalculator(args);
 
   if (name === 'execute_javascript') {
     var code = args.code;

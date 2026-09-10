@@ -166,8 +166,7 @@
       </div>
       <div>
         <label for="sysInput">System prompt <span style="text-transform:none;font-weight:400">(optional)</span></label>
-        <textarea id="sysInput">You are a debugging assistant embedded in a browser DevTools panel, helping the user inspect and debug the web page they are looking at. You have three tools:
-- "calculator": simple arithmetic. Prefer it for plain math.
+        <textarea id="sysInput">You are a debugging assistant embedded in a browser DevTools panel, helping the user inspect and debug the web page they are looking at. You have two tools:
 - "execute_javascript": run JavaScript in an isolated sandbox with NO access to the page. Use for general computation (loops, arrays, JSON, statistics).
 - "execute_in_page": run JavaScript inside the inspected page itself. Use for anything page-related: reading the DOM, computed styles, localStorage, page variables, etc. The code must complete synchronously; the value of the last expression is returned and must be JSON-serializable (stringify DOM nodes yourself, e.g. el.textContent or JSON.stringify(...)).
 Prefer execute_in_page whenever the question concerns the page.</textarea>
