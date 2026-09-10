@@ -529,6 +529,44 @@ function el(tag, cls, text) {
 
 function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
 
+/* One-line preview for a summary label. */
+function oneLine(s, max) {
+  s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  return s.length > max ? s.slice(0, max) + ' …' : s;
+}
+
+/* Pretty-printed tool-call arguments (if valid JSON). */
+function prettyArgs(args) {
+  if (!args) return '(no arguments)';
+  try { return JSON.stringify(JSON.parse(args), null, 2); }
+  catch (e) { return args; }
+}
+
+/* Name of the tool that produced the result with the given id. */
+function toolNameFor(id) {
+  for (var i = state.history.length - 1; i >= 0; i--) {
+    var m = state.history[i];
+    if (m && m.tool_calls) {
+      for (var j = 0; j < m.tool_calls.length; j++) {
+        if (m.tool_calls[j].id === id) {
+          return ((m.tool_calls[j].function || {}).name) || 'tool';
+        }
+      }
+    }
+  }
+  return 'tool';
+}
+
+/* Collapsible block: collapsed summary line, click to reveal full content. */
+function detailBlock(cls, summaryText, fullText) {
+  var d = el('details', cls);
+  d.appendChild(el('summary', null, summaryText));
+  var pre = el('pre', 'raw');
+  pre.textContent = fullText;
+  d.appendChild(pre);
+  return d;
+}
+
 function renderMsg(m) {
   var row = el('div', 'mrow ' + m.role);
   if (m.role === 'user') {
@@ -543,15 +581,21 @@ function renderMsg(m) {
         for (var i = 0; i < m.tool_calls.length; i++) {
           var tc = m.tool_calls[i];
           var f = tc.function || {};
-          var args = f.arguments || '';
-          if (args.length > 220) args = args.slice(0, 220) + ' …';
-          inner.appendChild(el('div', 'action-line', '⚙ ' + f.name + '(' + args + ')'));
+          inner.appendChild(detailBlock(
+            'toolcall',
+            '⚙ ' + (f.name || 'tool') + '(' + oneLine(f.arguments, 120) + ')',
+            prettyArgs(f.arguments)
+          ));
         }
       }
       row.appendChild(inner);
     }
   } else if (m.role === 'tool') {
-    row.appendChild(el('div', 'bubble', '↩ ' + (m.content || '')));
+    row.appendChild(detailBlock(
+      'toolresult',
+      '↩ ' + toolNameFor(m.tool_call_id) + ' → ' + oneLine(m.content, 90),
+      m.content || ''
+    ));
   }
   chat.appendChild(row);
 }

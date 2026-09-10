@@ -80,10 +80,26 @@
   }
   .mrow.assistant .inner { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 85%; }
 
-  .action-line {
+  details.toolcall, details.toolresult {
     font-family: var(--mono); font-size: 11px; color: var(--muted);
     background: #eef1f4; border: 1px solid var(--border); border-radius: 8px;
-    padding: 3px 8px; word-break: break-all;
+    max-width: 95%;
+  }
+  details.toolcall > summary, details.toolresult > summary {
+    padding: 3px 8px; cursor: pointer; user-select: none;
+    word-break: break-all; list-style: none;
+  }
+  details.toolcall > summary::-webkit-details-marker,
+  details.toolresult > summary::-webkit-details-marker { display: none; }
+  details.toolcall > summary::before { content: '▸ '; }
+  details.toolresult > summary::before { content: '▸ '; }
+  details.toolcall[open] > summary::before,
+  details.toolresult[open] > summary::before { content: '▾ '; }
+  details.toolcall > summary:hover, details.toolresult > summary:hover { color: var(--text); }
+  details.toolcall pre.raw, details.toolresult pre.raw {
+    margin: 0; padding: 6px 8px; border-top: 1px solid var(--border);
+    white-space: pre-wrap; word-break: break-word; font-size: 11px;
+    max-height: 260px; overflow: auto; background: #fff; color: var(--text);
   }
   .mrow.tool .bubble, .mrow.error .bubble {
     background: transparent; border: none; color: var(--muted);
