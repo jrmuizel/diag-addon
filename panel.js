@@ -57,10 +57,6 @@ function truncate(text) {
 var SANDBOX_TIMEOUT_MS = 8000;
 var SANDBOX_HIDDEN_CSS = 'position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;visibility:hidden;';
 
-/* Also used for API/permission differences below; the sandbox itself no
- * longer needs a Firefox-specific code path. */
-var IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
-
 var sandboxFrame = null;
 var sandboxReady = false;
 var sandboxPending = [];   // callbacks waiting for the frame to finish loading
@@ -229,10 +225,6 @@ async function runTool(tc) {
  * ===================================================================== */
 var state = { history: [], rendered: 0, busy: false };
 var API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-var OPENROUTER_ORIGIN = 'https://openrouter.ai/*';
-/* Firefox MV3 treats host_permissions as optional: fetch to openrouter.ai
- * needs an explicit grant (null = unknown yet, checked on first send). */
-var originGranted = null;
 
 var $ = function (id) { return document.getElementById(id); };
 var chat = $('chat'), input = $('input'), sendBtn = $('sendBtn'),
@@ -436,9 +428,8 @@ function showError(msg) {
   scrollBottom();
 }
 
-/* Direct OpenRouter fetch from the panel page. Works on Chrome (host
- * permission auto-granted) and on Firefox once the openrouter.ai host
- * permission has been granted. Returns the parsed JSON response. */
+/* POST to the OpenRouter chat-completions endpoint from the panel page and
+ * return the parsed JSON response. */
 async function directOrFetch(body) {
   var resp = await fetch(API_URL, {
     method: 'POST',
@@ -456,16 +447,13 @@ async function directOrFetch(body) {
       if (j && j.error) detail = j.error.message || detail;
     } catch (e) { /* not json */ }
     var err = new Error(detail);
-    err.http = true; // server responded; falling back to the relay won't help
+    // HTTP error: the server responded, so surface its message as-is.
+    err.http = true;
     throw err;
   }
   return resp.json();
 }
 
-/* Firefox: the openrouter.ai host permission may not be granted yet, and the
- * background page used for the relay may be unreachable ("Receiving end does
- * not exist") — so try a direct fetch first, then the relay (which can request
- * the permission itself), and surface clear guidance otherwise. */
 async function callAPI(messages) {
   var body = {
     model: modelInput.value.trim() || 'openrouter/auto',
@@ -473,29 +461,15 @@ async function callAPI(messages) {
     tools: TOOLS,
     tool_choice: 'auto'
   };
-
-  if (IS_FIREFOX) {
-    try {
-      return await directOrFetch(body);
-    } catch (directErr) {
-      if (directErr.http) throw directErr; // real API error, not a permission issue
-      var r = null;
-      try {
-        r = await bgSend({ type: 'or_fetch', apiKey: keyInput.value.trim(), body: body });
-      } catch (e) { /* relay unavailable */ }
-      if (r && r.ok === true) return r.data;
-      throw new Error(
-        'openrouter.ai request failed: ' +
-        (directErr && directErr.message ? directErr.message : directErr) +
-        '. Grant the "Access your data for openrouter.ai" permission in ' +
-        'about:addons → Extensions → Page Chat DevTools → Permissions' +
-        (r && r.error ? ' (relay: ' + r.error + ')' :
-         ', and make sure the extension is loaded from manifest.json (no background page found)')
-      );
-    }
+  try {
+    return await directOrFetch(body);
+  } catch (err) {
+    if (err.http) throw err; // server answered; surface its error as-is
+    throw new Error(
+      'Could not reach openrouter.ai (' + (err && err.message ? err.message : err) + '). ' +
+      'Check your network connection and that the extension is allowed to access openrouter.ai.'
+    );
   }
-
-  return await directOrFetch(body);
 }
 
 /* Run the user/AI loop, following tool calls until a plain text reply. */
@@ -542,9 +516,6 @@ async function runTurn() {
 
 /* ---------- actions ---------- */
 
-/* Split into a sync permission gate + async worker so that in Firefox the
- * permissions.request() call happens inside the click/Enter event handler
- * (user gesture), before any await. */
 function send() {
   if (state.busy) return;
   var text = input.value.trim();
@@ -553,27 +524,7 @@ function send() {
     showError('Enter your OpenRouter API key in Settings first.');
     return;
   }
-
-  /* Firefox: devtools pages have no permissions API; the background page
-   * requests the openrouter.ai host permission (if needed) during fetch. */
-  if (IS_FIREFOX) { doSend(text); return; }
-
-  if (originGranted === true) { doSend(text); return; }
-
-  if (originGranted === false) {
-    chrome.permissions.request({ origins: [OPENROUTER_ORIGIN] }, function (granted) {
-      if (granted) { originGranted = true; doSend(text); }
-      else showError('Permission to contact openrouter.ai was denied. Grant it in the extension\'s permission settings and try again.');
-    });
-    return;
-  }
-
-  /* unknown: check whether the origin is already granted */
-  chrome.permissions.contains({ origins: [OPENROUTER_ORIGIN] }, function (ok) {
-    originGranted = !!ok;
-    if (ok) doSend(text);
-    else showError('Click Send again to grant network access to openrouter.ai.');
-  });
+  doSend(text);
 }
 
 async function doSend(text) {

@@ -16,7 +16,7 @@ JS executor).
 | `manifest.json` | MV3 manifest for both browsers: `background.service_worker` (Chrome) + `background.scripts` (Firefox). Chrome 121+ ignores the `scripts` key (older Chrome would refuse it, hence `minimum_chrome_version: 121`); Firefox ignores `service_worker` and runs the event page |
 | `devtools.html` / `devtools.js` | DevTools entry point; creates the "Page Chat" panel |
 | `panel.html` / `panel.js` | The chat UI and chat loop (OpenRouter API, tool dispatch, rendering) |
-| `background.js` | Relay for extension APIs: settings storage and the OpenRouter request (used on Firefox; also available on Chrome) |
+| `background.js` | Relay for settings storage (used on Firefox; also available on Chrome) |
 | `sandbox.html` / `sandbox.js` | Manifest-**sandboxed** page (and its external runner script) that safely evaluates untrusted JS for the `execute_javascript` tool |
 
 ## Tools available to the chatbot
@@ -47,22 +47,18 @@ are sent only to `openrouter.ai`.
 
 ## Cross-browser notes
 
-Works in both Chrome and Firefox, with three Firefox-specific adaptations
+Works in both Chrome and Firefox, with two Firefox-specific adaptations
 (handled automatically at runtime):
 
-- **API access:** Firefox devtools pages only expose the `devtools` API
-  namespace plus runtime messaging — no `storage` or `permissions`. Settings
-  and the OpenRouter request therefore use a fallback chain on Firefox:
-  direct `fetch`/`localStorage` when possible, otherwise relayed through
-  `background.js`. Chrome keeps using direct `chrome.*` calls.
-- **Host permission grant:** Firefox MV3 treats `host_permissions` as
-  optional. The panel first tries the OpenRouter fetch directly — once the
-  `openrouter.ai` permission is granted (Firefox prompts at install for
-  temporary add-ons, or enable it under about:addons → Extensions →
-  **Page Chat DevTools** → *Permissions*), that just works. If the direct
-  fetch fails (permission missing), it falls back to the background page,
-  which requests the permission itself and retries. Chrome grants the
-  permission silently at install time.
+- **Settings storage:** Firefox devtools pages only expose the `devtools` API
+  namespace plus runtime messaging — no `storage`. Settings therefore use a
+  fallback chain on Firefox: `chrome.storage.local` when available, then
+  `localStorage`, then relayed through `background.js`. Chrome uses
+  `chrome.storage.local` directly.
+- **OpenRouter access:** The panel calls OpenRouter directly with `fetch` on
+  both browsers — there is no request relay. OpenRouter sends permissive CORS
+  headers, so the call does not need the `openrouter.ai` host permission. If
+  the request fails, the panel surfaces a clear network error.
 - **JS sandbox:** The `execute_javascript` runner lives in the
   manifest-sandboxed pages `sandbox.html` / `sandbox.js` on both browsers.
   Firefox gained support for the manifest `sandbox` key (and
