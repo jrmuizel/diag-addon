@@ -38,6 +38,7 @@ var TOOLS = [{
 }];
 
 var MAX_RESULT = 8000;
+var MAX_TOOL_ROUNDS = 50;
 
 function truncate(text) {
   if (text.length > MAX_RESULT) return text.slice(0, MAX_RESULT) + '\n...[truncated]';
@@ -483,7 +484,7 @@ async function callAPI(messages) {
 /* Run the user/AI loop, following tool calls until a plain text reply. */
 async function runTurn() {
   var steps = 0;
-  while (steps++ < 15) {
+  while (steps++ < MAX_TOOL_ROUNDS) {
     var messages = [];
     var sys = sysInput.value.trim();
     if (sys) messages.push({ role: 'system', content: sys });
@@ -519,7 +520,7 @@ async function runTurn() {
     }
     return; // final text answer is rendered
   }
-  throw new Error('stopped after 15 tool-call rounds (possible loop)');
+  throw new Error('stopped after ' + MAX_TOOL_ROUNDS + ' tool-call rounds (possible loop)');
 }
 
 /* ---------- actions ---------- */
