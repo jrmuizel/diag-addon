@@ -55,10 +55,6 @@ Works in both Chrome and Firefox, with two Firefox-specific adaptations
   fallback chain on Firefox: `chrome.storage.local` when available, then
   `localStorage`, then relayed through `background.js`. Chrome uses
   `chrome.storage.local` directly.
-- **OpenRouter access:** The panel calls OpenRouter directly with `fetch` on
-  both browsers — there is no request relay. OpenRouter sends permissive CORS
-  headers, so the call does not need the `openrouter.ai` host permission. If
-  the request fails, the panel surfaces a clear network error.
 - **JS sandbox:** The `execute_javascript` runner lives in the
   manifest-sandboxed pages `sandbox.html` / `sandbox.js` on both browsers.
   Firefox gained support for the manifest `sandbox` key (and
