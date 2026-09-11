@@ -6,7 +6,6 @@
   "devtools_page": "devtools.html",
   "permissions": ["storage"],
   "host_permissions": ["https://openrouter.ai/*"],
-  "optional_host_permissions": ["https://openrouter.ai/*"],
   "background": {
     "service_worker": "background.js",
     "scripts": ["background.js"]
