@@ -471,8 +471,7 @@ async function callAPI(messages) {
     model: modelInput.value.trim() || 'openrouter/auto',
     messages: messages,
     tools: TOOLS,
-    tool_choice: 'auto',
-    max_tokens: 4096
+    tool_choice: 'auto'
   };
 
   if (IS_FIREFOX) {
