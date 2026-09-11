@@ -349,6 +349,41 @@ function prettyArgs(args) {
   catch (e) { return args; }
 }
 
+/* Tool-call arguments for display. The tools here take a single "code"
+ * argument, so show the source verbatim: JSON-escaping turns its newlines
+ * into literal "\n" sequences and makes the code hard to read. Falls back to
+ * pretty-printed JSON for any other argument shape. */
+function formatToolArgs(args) {
+  if (!args) return '(no arguments)';
+  var parsed;
+  try { parsed = JSON.parse(args); }
+  catch (e) { return args; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+      typeof parsed.code !== 'string') {
+    return prettyArgs(args);
+  }
+  var keys = Object.keys(parsed);
+  if (keys.length === 1) return parsed.code; // only "code": show the source
+  var rest = {};
+  for (var i = 0; i < keys.length; i++) {
+    if (keys[i] !== 'code') rest[keys[i]] = parsed[keys[i]];
+  }
+  return JSON.stringify(rest, null, 2) + '\n\ncode:\n' + parsed.code;
+}
+
+/* One-line preview of a tool call's arguments (first line of code, if any). */
+function toolArgsPreview(args, max) {
+  var parsed;
+  try { parsed = JSON.parse(args); } catch (e) { parsed = null; }
+  if (parsed && typeof parsed === 'object' && typeof parsed.code === 'string') {
+    var lines = parsed.code.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].trim()) return oneLine(lines[i], max);
+    }
+  }
+  return oneLine(args, max);
+}
+
 /* Name of the tool that produced the result with the given id. */
 function toolNameFor(id) {
   for (var i = state.history.length - 1; i >= 0; i--) {
@@ -390,8 +425,8 @@ function renderMsg(m) {
           var f = tc.function || {};
           inner.appendChild(detailBlock(
             'toolcall',
-            '⚙ ' + (f.name || 'tool') + '(' + oneLine(f.arguments, 120) + ')',
-            prettyArgs(f.arguments)
+            '⚙ ' + (f.name || 'tool') + '(' + toolArgsPreview(f.arguments, 120) + ')',
+            formatToolArgs(f.arguments)
           ));
         }
       }
