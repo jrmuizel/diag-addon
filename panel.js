@@ -327,6 +327,14 @@ function el(tag, cls, text) {
 
 function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
 
+/* Append a row to the transcript, keeping the typing indicator last so it
+ * stays pinned to the bottom while messages and tool results arrive. */
+function appendToChat(node) {
+  var typing = $('typingRow');
+  if (typing) chat.insertBefore(node, typing);
+  else chat.appendChild(node);
+}
+
 /* One-line preview for a summary label. */
 function oneLine(s, max) {
   s = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
@@ -395,7 +403,7 @@ function renderMsg(m) {
       m.content || ''
     ));
   }
-  chat.appendChild(row);
+  appendToChat(row);
 }
 
 /* Render any history entries not yet shown. */
@@ -424,7 +432,7 @@ function showTyping(on) {
 function showError(msg) {
   var row = el('div', 'mrow error');
   row.appendChild(el('div', 'bubble', '⚠ ' + msg));
-  chat.appendChild(row);
+  appendToChat(row);
   scrollBottom();
 }
 
