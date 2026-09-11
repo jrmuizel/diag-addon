@@ -17,7 +17,7 @@ JS executor).
 | `devtools.html` / `devtools.js` | DevTools entry point; creates the "Page Chat" panel |
 | `panel.html` / `panel.js` | The chat UI and chat loop (OpenRouter API, tool dispatch, rendering) |
 | `background.js` | Relay for extension APIs: settings storage and the OpenRouter request (used on Firefox; also available on Chrome) |
-| `sandbox.html` | Manifest-**sandboxed** page that safely evaluates untrusted JS for the `execute_javascript` tool (Chrome) |
+| `sandbox.html` / `sandbox.js` | Manifest-**sandboxed** page (and its external runner script) that safely evaluates untrusted JS for the `execute_javascript` tool |
 
 ## Tools available to the chatbot
 
@@ -63,11 +63,13 @@ Works in both Chrome and Firefox, with three Firefox-specific adaptations
   fetch fails (permission missing), it falls back to the background page,
   which requests the permission itself and retries. Chrome grants the
   permission silently at install time.
-- **JS sandbox:** Firefox doesn't support the manifest `sandbox` key, so on
-  Firefox the `execute_javascript` runner is embedded in an iframe with
-  `sandbox="allow-scripts"` pointing at a `data:` URL (opaque origin, does not
-  inherit the extension CSP). Chrome uses the manifest-sandboxed
-  `sandbox.html`.
+- **JS sandbox:** The `execute_javascript` runner lives in the
+  manifest-sandboxed pages `sandbox.html` / `sandbox.js` on both browsers.
+  Firefox gained support for the manifest `sandbox` key (and
+  `content_security_policy.sandbox`) in Firefox 154; the manifest grants the
+  sandboxed page a CSP that allows `eval`. On older Firefox versions the page
+  is treated as a normal extension page, so `eval` is blocked and the tool
+  returns an error instead of running.
 - **Background page:** one `manifest.json` serves both browsers — Chrome runs
   `background.js` as a service worker, Firefox as an event page (see the
   manifest row in the file table above).

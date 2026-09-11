@@ -45,41 +45,26 @@ function truncate(text) {
 }
 
 /* =====================================================================
- * execute_javascript: run code in the sandboxed runner page
- * (sandbox.html), embedded as a hidden iframe. MV3 CSP forbids
- * eval and blob: workers on extension pages, so the manifest
- * "sandbox" mechanism is used instead.
+ * execute_javascript: run code in the manifest-sandboxed runner page
+ * (sandbox.html), embedded as a hidden iframe. MV3 CSP forbids eval on
+ * extension pages, so the manifest "sandbox" mechanism is used: the page
+ * gets an opaque origin and its own CSP (content_security_policy.sandbox
+ * in manifest.json) that permits eval. Firefox added the manifest
+ * "sandbox" key in version 154; on older versions it is an unrecognized
+ * property (warned about, no effect), so the page loads as a normal
+ * extension page and eval is blocked.
  * ===================================================================== */
 var SANDBOX_TIMEOUT_MS = 8000;
 var SANDBOX_HIDDEN_CSS = 'position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;visibility:hidden;';
 
-/* Firefox does not support the manifest "sandbox" key (Chrome-only). There,
- * the runner is embedded in an iframe with sandbox="allow-scripts" pointing
- * at a data: URL: it gets an opaque origin (eval allowed) and, being a
- * non-local scheme, does not inherit the extension page CSP that forbids
- * inline scripts. Chrome uses the manifest-sandboxed sandbox.html. */
+/* Also used for API/permission differences below; the sandbox itself no
+ * longer needs a Firefox-specific code path. */
 var IS_FIREFOX = /Firefox\//.test(navigator.userAgent);
 
 var sandboxFrame = null;
 var sandboxReady = false;
 var sandboxPending = [];   // callbacks waiting for the frame to finish loading
 var sandboxHandlers = new Map(); // nonce -> { resolve, timer }
-
-var sandboxRunnerPromise = null;
-function getSandboxRunnerSource() {
-  if (!sandboxRunnerPromise) {
-    /* Relative URL: avoids chrome.runtime, which is partially exposed
-     * in Firefox devtools pages. Same-origin extension resource. */
-    sandboxRunnerPromise = fetch('sandbox.html')
-      .then(function (r) { return r.text(); })
-      .then(function (text) {
-        var m = text.match(/<script>([\s\S]*)<\/script>/);
-        if (!m) throw new Error('could not extract runner source');
-        return m[1];
-      });
-  }
-  return sandboxRunnerPromise;
-}
 
 function resetSandbox() {
   if (sandboxFrame && sandboxFrame.parentNode) sandboxFrame.parentNode.removeChild(sandboxFrame);
@@ -95,38 +80,16 @@ function flushSandboxQueue() {
   q.forEach(function (cb) { cb(); });
 }
 
-function failPendingSandbox(msg) {
-  var q = sandboxPending;
-  sandboxPending = [];
-  q.forEach(function (cb) { cb(msg); });
-}
-
 /* Ensures the sandbox iframe exists and has loaded, then calls cb(). */
 function ensureSandbox(cb) {
   if (!sandboxFrame || !sandboxFrame.isConnected) {
     resetSandbox();
-    if (IS_FIREFOX) {
-      getSandboxRunnerSource().then(function (runnerSrc) {
-        if (sandboxFrame) return; // another request already created one
-        var iframe = document.createElement('iframe');
-        iframe.setAttribute('sandbox', 'allow-scripts');
-        iframe.style.cssText = SANDBOX_HIDDEN_CSS;
-        var html = '<!doctype html><html><body><script>' + runnerSrc + '\x3c/script></body></html>';
-        iframe.src = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
-        iframe.addEventListener('load', flushSandboxQueue);
-        document.body.appendChild(iframe);
-        sandboxFrame = iframe;
-      }).catch(function (err) {
-        failPendingSandbox('Error: could not start sandbox: ' + (err && err.message ? err.message : err));
-      });
-    } else {
-      var iframe = document.createElement('iframe');
-      iframe.src = 'sandbox.html';
-      iframe.style.cssText = SANDBOX_HIDDEN_CSS;
-      iframe.addEventListener('load', flushSandboxQueue);
-      document.body.appendChild(iframe);
-      sandboxFrame = iframe;
-    }
+    var iframe = document.createElement('iframe');
+    iframe.src = 'sandbox.html';
+    iframe.style.cssText = SANDBOX_HIDDEN_CSS;
+    iframe.addEventListener('load', flushSandboxQueue);
+    document.body.appendChild(iframe);
+    sandboxFrame = iframe;
   }
   if (sandboxReady) cb();
   else sandboxPending.push(cb);
