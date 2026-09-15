@@ -23,7 +23,7 @@ var TOOLS = [{
   type: 'function',
   function: {
     name: 'execute_in_page',
-    description: 'Run JavaScript code in the INSPECTED PAGE (the web page open in the browser this DevTools session is attached to), with full access to its DOM, window, document, localStorage and page variables. Use this for anything page-related: counting elements, reading content or attributes, checking scripts, cookies, localStorage, page state, etc. The value of the last expression is returned and must be JSON-serializable (DOM nodes are not — stringify them yourself, e.g. el.textContent, el.outerHTML, or JSON.stringify(...)). The code must complete synchronously; Promises and async operations are not awaited. Note: pages with a strict Content-Security-Policy may block eval, in which case an error is returned.',
+    description: 'Run JavaScript code in the INSPECTED PAGE (the web page open in the browser this DevTools session is attached to), with full access to its DOM, window, document, localStorage and page variables. Use this for anything page-related: counting elements, reading content or attributes, checking scripts, cookies, localStorage, page state, etc. The value of the last expression is returned and must be JSON-serializable (DOM nodes are not — stringify them yourself, e.g. el.textContent, el.outerHTML, or JSON.stringify(...)). The code must complete synchronously; Promises and async operations are not awaited. It runs with the same privileges as the DevTools console (page CSP does not block it), and statement sequences plus a trailing expression are both fine.',
     parameters: {
       type: 'object',
       properties: {
@@ -143,41 +143,51 @@ function execSandboxedJs(code) {
  * execute_in_page: run code in the inspected page via
  * chrome.devtools.inspectedWindow.eval.
  *
- * The supplied code is evaluated inside a wrapper in the page that:
- *   - evaluates the model's code with an indirect eval,
- *   - refuses Promise results (eval does not await them),
- *   - serializes the value to JSON so DOM nodes cannot crash the call,
- * and always returns a JSON string. The outer callback then parses it.
+ * The source is handed to inspectedWindow.eval as-is. That API compiles and
+ * runs it in the inspected page's main world through the DevTools inspector —
+ * the same path typing into the DevTools console uses — so it is NOT subject
+ * to the page's Content-Security-Policy.
+ *
+ * (An earlier version instead wrapped the source in a page-side
+ * `(0,eval)(...)`. The inspector call itself was never the problem; the
+ * runtime eval() it performed inside the page was, because page CSP gates
+ * runtime code generation via script-src. On pages without 'unsafe-eval' that
+ * threw an EvalError which looked like inspectedWindow.eval being
+ * CSP-blocked.)
+ *
+ * inspectedWindow.eval yields the completion value of the source — the value
+ * of its last expression — so statements plus a trailing expression work
+ * without needing a `return`. Plain objects and arrays round-trip as real
+ * values (the bridge JSON-clones them), but the edges are uneven:
+ *
+ *   - a thrown error arrives as { isException: true, value: "<msg>\n\t<stack>" },
+ *   - a value the bridge cannot clone at all (function, cyclic object such as
+ *     `window`) arrives as { isError: true, code, description, details } where
+ *     `description` is a format string ("Inspector protocol error: %s") whose
+ *     placeholders are filled from `details` — hence formatEvalException below,
+ *   - a DOM node or a Promise clones to `{}` with no error at all, so the tool
+ *     description tells the model to stringify nodes and stay synchronous.
  * ===================================================================== */
+/* Turns an inspectedWindow.eval exceptionInfo into a readable message. */
+function formatEvalException(exception) {
+  if (exception.value) return String(exception.value);
+  if (exception.description) {
+    return (exception.details || []).reduce(function (msg, detail) {
+      return msg.replace('%s', String(detail));
+    }, String(exception.description));
+  }
+  return exception.code || 'evaluation failed';
+}
+
 function runInPage(code) {
   return new Promise(function (resolve) {
-    var wrapped =
-      '(function(){' +
-      'var r;' +
-      'try{r=(0,eval)(' + JSON.stringify(code) + ');}' +
-      'catch(e){return JSON.stringify({error:String((e&&(e.stack||e.message))||e)});}' +
-      'if(r&&typeof r.then==="function"){' +
-      'return JSON.stringify({error:"code returned a Promise; execute_in_page only supports synchronous code. Rewrite the code to compute the result synchronously."});' +
-      '}' +
-      'try{return JSON.stringify({value:r===undefined?null:r});}' +
-      'catch(e){return JSON.stringify({error:"result is not JSON-serializable ("+e.message+"). Convert it to a plain value first, e.g. el.textContent, el.outerHTML, or JSON.stringify(...)."});}' +
-      '})()';
-
     try {
-      chrome.devtools.inspectedWindow.eval(wrapped, function (result, exception) {
+      chrome.devtools.inspectedWindow.eval(code, function (result, exception) {
         if (exception) {
-          var msg = (exception.description || exception.value || exception.code || 'evaluation failed');
-          resolve(truncate('Error: ' + msg));
+          resolve(truncate('Error: ' + formatEvalException(exception)));
           return;
         }
-        var parsed;
-        try { parsed = JSON.parse(result); }
-        catch (e) { resolve(truncate('Error: could not parse evaluation result: ' + e.message)); return; }
-        if (parsed.error !== undefined) {
-          resolve(truncate('Error: ' + parsed.error));
-        } else {
-          resolve(truncate('Return value: ' + JSON.stringify(parsed.value)));
-        }
+        resolve(truncate('Return value: ' + JSON.stringify(result === undefined ? null : result)));
       });
     } catch (err) {
       resolve('Error: inspectedWindow.eval failed: ' + (err && err.message ? err.message : err));

@@ -29,8 +29,8 @@ JS executor).
    `window`, `document` and `localStorage`. The value of the last expression is
    returned and must be JSON-serializable (DOM nodes should be stringified, e.g.
    `el.textContent` or `JSON.stringify(...)`), and the code must complete
-   synchronously. Pages with a strict Content-Security-Policy may block eval, in
-   which case an error is returned to the model.
+   synchronously. It runs with the same privileges as the DevTools console, so
+   page CSP does not block it.
 
 ## Setup
 
