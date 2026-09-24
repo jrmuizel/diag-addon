@@ -420,8 +420,9 @@ function toolNameFor(id) {
  * applied so their contents are never re-parsed.
  *
  * Supported: fenced code blocks (``` / ~~~), headings (# .. ######),
- * blockquotes, unordered/ordered lists, horizontal rules, paragraphs, and
- * inline code, bold, italic, strikethrough and links.
+ * blockquotes, unordered/ordered lists, horizontal rules, GFM tables (with
+ * :--- / ---: / :---: alignment), paragraphs, and inline code, bold, italic,
+ * strikethrough and links.
  * ===================================================================== */
 function escapeHtml(s) {
   return String(s == null ? '' : s)
@@ -476,6 +477,34 @@ function renderInline(text) {
     .replace(/~~([^~]+)~~/g, '<del>$1</del>');
 
   return text.replace(/\u0000(\d+)\u0000/g, function (m, i) { return stash[+i]; });
+}
+
+/* Split a GFM table row into trimmed cells, dropping the optional leading
+ * and trailing pipes. Escaped pipes are not handled (tiny parser). */
+function splitTableRow(line) {
+  var s = String(line).trim();
+  if (s.charAt(0) === '|') s = s.slice(1);
+  if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+  return s.split('|').map(function (c) { return c.trim(); });
+}
+
+/* True if every cell is a GFM delimiter (---, :--, --:, :-:). */
+function isDelimiterRow(cells) {
+  if (!cells.length) return false;
+  for (var i = 0; i < cells.length; i++) {
+    if (!/^:?-+:?$/.test(cells[i])) return false;
+  }
+  return true;
+}
+
+/* Map delimiter cells to a text-align value ('' means default/left). */
+function tableAlign(cell) {
+  var left = cell.charAt(0) === ':';
+  var right = cell.charAt(cell.length - 1) === ':';
+  if (left && right) return 'center';
+  if (right) return 'right';
+  if (left) return 'left';
+  return '';
 }
 
 /* Render a full markdown document to an HTML string. */
@@ -536,6 +565,35 @@ function renderMarkdown(src) {
       }
       out.push('<blockquote>' + renderMarkdown(quote.join('\n')) + '</blockquote>');
       continue;
+    }
+
+    // GFM table: a row with pipes followed by a delimiter row.
+    var delim = i + 1 < lines.length ? splitTableRow(lines[i + 1]) : [];
+    if (line.indexOf('|') !== -1 && isDelimiterRow(delim)) {
+      var header = splitTableRow(line);
+      if (header.length === delim.length) {
+        flushPara();
+        var align = delim.map(tableAlign);
+        function cell(tag, text, idx) {
+          return '<' + tag + (align[idx] ? ' style="text-align:' + align[idx] + '"' : '') +
+            '>' + renderInline(text) + '</' + tag + '>';
+        }
+        out.push('<table><thead><tr>');
+        for (var c = 0; c < header.length; c++) out.push(cell('th', header[c], c));
+        out.push('</tr></thead><tbody>');
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf('|') !== -1) {
+          var cells = splitTableRow(lines[i]);
+          out.push('<tr>');
+          for (var k = 0; k < header.length; k++) {
+            out.push(cell('td', cells[k] === undefined ? '' : cells[k], k));
+          }
+          out.push('</tr>');
+          i++;
+        }
+        out.push('</tbody></table>');
+        continue;
+      }
     }
 
     // Unordered list.
