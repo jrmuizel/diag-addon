@@ -271,6 +271,50 @@ async function reviewPageCode(code) {
   return { allowed: v.verdict === 'allow', reason: String(v.reason || '') };
 }
 
+/* Show a blocked execute_in_page call and let the user override the reviewer.
+ * Resolves to true when the user clicks "Allow once", false when they decline. */
+function requestUserApproval(code, reason) {
+  return new Promise(function (resolve) {
+    var row = el('div', 'mrow approval');
+    var card = el('div', 'approval-card');
+
+    card.appendChild(el('div', 'approval-title',
+      'Safety check blocked code from running in this page'));
+    card.appendChild(el('div', 'approval-reason',
+      reason ? 'Reason: ' + reason : 'The reviewer did not give a reason.'));
+    card.appendChild(detailBlock('approval-code', 'Show the blocked code', code));
+
+    var actions = el('div', 'approval-actions');
+    var allow = el('button', 'allow', 'Allow once');
+    var deny = el('button', 'deny', "Don't run");
+    var status = el('span', 'approval-status', 'Nothing has run yet.');
+    allow.type = 'button';
+    deny.type = 'button';
+    actions.appendChild(allow);
+    actions.appendChild(deny);
+    actions.appendChild(status);
+    card.appendChild(actions);
+    row.appendChild(card);
+
+    var settled = false;
+    function finish(allowed) {
+      if (settled) return;
+      settled = true;
+      pendingApproval = null;
+      allow.disabled = true;
+      deny.disabled = true;
+      status.textContent = allowed ? 'Allowed — running…' : 'Declined — code was not run.';
+      resolve(allowed);
+    }
+    allow.addEventListener('click', function () { finish(true); });
+    deny.addEventListener('click', function () { finish(false); });
+    pendingApproval = { cancel: function () { finish(false); } };
+
+    appendToChat(row);
+    scrollBottom();
+  });
+}
+
 /* Execute a tool call; resolves to the string result shown to the model. */
 async function runTool(tc) {
   var name = tc && tc.function && tc.function.name;
@@ -298,9 +342,14 @@ async function runTool(tc) {
     if (typeof pageCode !== 'string' || !pageCode.trim())
       return 'Error: missing required string argument "code"';
     var review = await reviewPageCode(pageCode);
-    if (!review.allowed)
-      return 'Blocked by safety check: ' + (review.reason || 'no reason given') +
-        '\nThe code was NOT run. Do not try to work around this check.';
+    if (!review.allowed) {
+      var approved = await requestUserApproval(pageCode, review.reason);
+      if (!approved) {
+        return 'Blocked by safety check: ' + (review.reason || 'no reason given') +
+          '\nThe user declined to allow this code, so it was NOT run. Do not retry it or try ' +
+          'to work around the check; ask the user how they want to proceed.';
+      }
+    }
     try {
       return await runInPage(pageCode);
     } catch (err) {
@@ -315,6 +364,7 @@ async function runTool(tc) {
  * State
  * ===================================================================== */
 var state = { history: [], rendered: 0, busy: false };
+var pendingApproval = null; // resolves a blocked call as declined if chat is cleared
 var API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 var $ = function (id) { return document.getElementById(id); };
@@ -693,6 +743,7 @@ async function doSend(text) {
 }
 
 function clearChat() {
+  if (pendingApproval) pendingApproval.cancel();
   state.history = [];
   state.rendered = 0;
   chat.innerHTML = '';

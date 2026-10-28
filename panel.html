@@ -147,6 +147,38 @@
     max-width: 95%;
   }
   .mrow.error .bubble { color: var(--danger); font-family: inherit; background: #fdecec; border: 1px solid #f5c6c6; }
+
+  /* ---------- safety-check approval ---------- */
+  .mrow.approval { justify-content: flex-start; }
+  .approval-card {
+    max-width: 95%; background: #fffbeb; border: 1px solid #f0c36d;
+    border-radius: 10px; padding: 9px 11px; font-size: 12.5px; line-height: 1.4;
+  }
+  .approval-title { font-weight: 650; color: #92400e; margin-bottom: 3px; }
+  .approval-reason { color: var(--text); margin-bottom: 6px; }
+  .approval-card details { margin-top: 4px; }
+  .approval-card summary {
+    cursor: pointer; user-select: none; color: var(--muted); font-size: 11px;
+    list-style: none;
+  }
+  .approval-card summary::-webkit-details-marker { display: none; }
+  .approval-card summary::before { content: '▸ '; }
+  .approval-card details[open] > summary::before { content: '▾ '; }
+  .approval-card pre {
+    margin: 5px 0 0; padding: 6px 8px; background: #fff; border: 1px solid #f0c36d;
+    border-radius: 6px; white-space: pre-wrap; word-break: break-word; font-size: 11px;
+    max-height: 220px; overflow: auto; font-family: var(--mono); color: var(--text);
+  }
+  .approval-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .approval-actions button {
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 7px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  .approval-actions button.allow { background: #b45309; border-color: #b45309; color: #fff; }
+  .approval-actions button:hover:not(:disabled) { filter: brightness(1.08); }
+  .approval-actions button:disabled { opacity: .5; cursor: default; }
+  .approval-status { font-size: 11.5px; color: var(--muted); }
+
   .mrow.typing .bubble { background: #eceff3; border: none; color: var(--muted); font-size: 12px; }
   .dot { display: inline-block; animation: blink 1.2s infinite; }
   .dot:nth-child(2) { animation-delay: .2s; }
@@ -208,7 +240,7 @@
       <div>
         <label for="reviewModelInput">Safety-check model <span style="text-transform:none;font-weight:400">(optional)</span></label>
         <input id="reviewModelInput" list="models" placeholder="same as Model" spellcheck="false">
-        <div class="hint">Reviews every <code>execute_in_page</code> call before it runs and blocks code that looks malicious or sends data off the page.</div>
+        <div class="hint">Reviews every <code>execute_in_page</code> call before it runs. Blocked calls show the reason and code here, with an option to allow that one run.</div>
       </div>
       <div>
         <label for="sysInput">System prompt <span style="text-transform:none;font-weight:400">(optional)</span></label>

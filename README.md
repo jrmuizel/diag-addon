@@ -30,7 +30,10 @@ JS executor).
    returned and must be JSON-serializable (DOM nodes should be stringified, e.g.
    `el.textContent` or `JSON.stringify(...)`), and the code must complete
    synchronously. It runs with the same privileges as the DevTools console, so
-   page CSP does not block it.
+   page CSP does not block it. A safety-check model reviews every call before
+   it runs; if it blocks the code, the panel shows the reason and the code with
+   **Allow once** / **Don't run** buttons, and nothing executes unless the user
+   allows that call.
 
 ## Setup
 
@@ -74,3 +77,9 @@ Works in both Chrome and Firefox, with two Firefox-specific adaptations
 - `execute_in_page` runs code in the real inspected page with full page
   privileges. It is the same trust level as typing into the DevTools console.
   Only let the model run code there when you trust the page and the request.
+- Before `execute_in_page` runs, a separate reviewer model checks the code
+  against the user's latest request. Blocked calls are never run silently: the
+  panel displays the reviewer's reason and the exact code, and the user can
+  either decline or explicitly **Allow once**. If the reviewer is unreachable
+  or returns an invalid verdict, the call is treated as blocked for the same
+  manual-approval flow.
