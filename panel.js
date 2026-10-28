@@ -38,6 +38,8 @@ var TOOLS = [{
 }];
 
 var MAX_RESULT = 8000;
+
+var DEFAULT_MODEL = 'deepseek/deepseek-v4.1-flash-1017';
 var MAX_TOOL_ROUNDS = 50;
 
 function truncate(text) {
@@ -246,7 +248,7 @@ function parseVerdict(text) {
 /* Resolves to { allowed: boolean, reason: string }. Never throws. */
 async function reviewPageCode(code) {
   var body = {
-    model: reviewModelInput.value.trim() || modelInput.value.trim() || 'openrouter/auto',
+    model: reviewModelInput.value.trim() || modelInput.value.trim() || DEFAULT_MODEL,
     temperature: 0,
     messages: [
       { role: 'system', content: REVIEW_PROMPT },
@@ -595,7 +597,7 @@ async function directOrFetch(body) {
 
 async function callAPI(messages) {
   var body = {
-    model: modelInput.value.trim() || 'openrouter/auto',
+    model: modelInput.value.trim() || DEFAULT_MODEL,
     messages: messages,
     tools: TOOLS,
     tool_choice: 'auto'
