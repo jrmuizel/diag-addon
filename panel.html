@@ -205,6 +205,11 @@
         </datalist>
       </div>
       <div>
+        <label for="reviewModelInput">Safety-check model <span style="text-transform:none;font-weight:400">(optional)</span></label>
+        <input id="reviewModelInput" list="models" placeholder="same as Model" spellcheck="false">
+        <div class="hint">Reviews every <code>execute_in_page</code> call before it runs and blocks code that looks malicious or sends data off the page.</div>
+      </div>
+      <div>
         <label for="sysInput">System prompt <span style="text-transform:none;font-weight:400">(optional)</span></label>
         <textarea id="sysInput">You are a debugging assistant embedded in a browser DevTools panel, helping the user inspect and debug the web page they are looking at. You have two tools:
 - "execute_javascript": run JavaScript in an isolated sandbox with NO access to the page. Use for general computation (loops, arrays, JSON, statistics).
